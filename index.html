@@ -215,8 +215,8 @@ textarea { resize: vertical; min-height: 44px; }
   var DAY_SHORT = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
   var DAY_LONG = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 
-  function ex(id, name, sets, reps, rest, note, max) {
-    return { id: id, name: name, sets: sets, reps: reps, rest: rest, note: note || '', max: !!max };
+  function ex(id, name, sets, reps, rest, note, max, secs) {
+    return { id: id, name: name, sets: sets, reps: reps, rest: rest, note: note || '', max: !!max, secs: secs || 0 };
   }
   function defaultProgram() {
     return [
@@ -237,21 +237,32 @@ textarea { resize: vertical; min-height: 44px; }
         ex('w4', 'Front lever tuck', 4, '5-8 s', 90, ''),
         ex('w2', 'L-sit', 3, '8-10 s', 75, 'En tuck si besoin.')
       ] },
-      { focus: 'Jambes + gainage', note: '', exercises: [
-        ex('j1', 'Pistol squats assistés', 4, '5 / jambe', 90, ''),
-        ex('j2', 'Fentes bulgares', 3, '8-10', 90, ''),
-        ex('j3', 'Nordic curl négatifs', 3, '5', 90, ''),
-        ex('j4', 'Planche', 3, '45 s', 60, '')
+      { focus: 'Yoga et mobilité', note: 'Circuit d’environ 25 min, jamais à la douleur. Respire lentement et garde chaque position sans forcer.', exercises: [
+        ex('y1', 'Respiration et chat-vache', 1, '2 min', 0, '', false, 120),
+        ex('y2', 'Chien tête en bas (pédalage)', 1, '2 min', 0, '', false, 120),
+        ex('y3', 'Rotation thoracique (thread the needle)', 2, '1 min', 0, 'Une série par côté.', false, 60),
+        ex('y4', 'Pose du chiot (épaules)', 3, '1 min', 0, 'Droite, gauche, puis gauche encore pour l’épaule moins mobile.', false, 60),
+        ex('y5', 'Wall angels', 2, '10', 0, 'Dos et bras plaqués au mur.', false, 60),
+        ex('y6', 'Étirements des poignets', 1, '2 min', 0, 'Flexion puis extension.', false, 120),
+        ex('y7', 'Fente basse', 2, '1 min', 0, 'Une série par côté.', false, 60),
+        ex('y8', 'Pigeon ou figure en 4', 2, '1 min 30', 0, 'Une série par côté.', false, 90),
+        ex('y9', 'Flexion avant, jambes tendues', 1, '2 min', 0, '', false, 120),
+        ex('y10', 'Suspension passive à la barre', 2, '30 s', 30, 'Épaules relâchées.', false, 30),
+        ex('y11', 'Relaxation au sol', 1, '2 min', 0, '', false, 120)
       ] },
       { focus: 'Full body', note: '', exercises: [
-        ex('v1', 'Tractions strictes', 4, '4', 120, 'Max moins 2 répétitions.'),
-        ex('v2', 'Dips stricts', 4, '8-10', 120, 'Max moins 2 répétitions.'),
-        ex('v3', 'Pompes archer', 3, '6', 90, ''),
-        ex('v4', 'Dragon flag négatifs', 3, '5', 90, ''),
+        ex('v1', 'Tractions strictes', 4, '4', 90, 'Max moins 2 répétitions.'),
+        ex('v2', 'Dips stricts', 4, '8-10', 90, 'Max moins 2 répétitions.'),
+        ex('v3', 'Pompes déclinées', 3, '8-10', 75, ''),
+        ex('v4', 'Dragon flag négatifs', 3, '5', 75, ''),
         ex('v5', 'Finisher : pompes max', 1, 'max', 0, 'Une seule série, jusqu’à l’échec technique.', true)
       ] },
-      { focus: 'Repos', note: 'Marche et mobilité. Récupération active.', exercises: [] },
-      { focus: 'Repos', note: 'Repos complet.', exercises: [] }
+      { focus: 'Fractionné', note: 'Course sur le tapis. L’effort compte plus que la vitesse : rapide = 8/10, tu ne peux plus parler.', exercises: [
+        ex('s1', 'Échauffement tranquille', 1, '10 min', 0, '', false, 600),
+        ex('s2', 'Fractionné : 1 min rapide', 6, '1 min', 120, 'Coche après chaque minute rapide : le minuteur compte les 2 min lentes. +1 répétition par semaine jusqu’à 8, puis phases rapides de 1 min 30.', false, 60),
+        ex('s3', 'Retour au calme', 1, '5 min', 0, '', false, 300)
+      ] },
+      { focus: 'Repos', note: 'Repos complet. Les 10 000 pas restent l’objectif de la journée.', exercises: [] }
     ];
   }
 
@@ -337,7 +348,7 @@ textarea { resize: vertical; min-height: 44px; }
     var sec = 0;
     d.exercises.forEach(function (e) {
       var n = e.max ? 1 : (parseInt(e.sets, 10) || 0);
-      sec += n * (40 + (parseInt(e.rest, 10) || 0));
+      sec += n * ((e.secs || 40) + (parseInt(e.rest, 10) || 0));
     });
     return Math.round(sec / 60);
   }
