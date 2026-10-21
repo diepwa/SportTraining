@@ -13,7 +13,7 @@ Une app d'entraînement en un seul fichier (`index.html`), sans build. Ouvre-la 
   - si tu as manqué la cible : elle ne bouge pas. Deux semaines manquées de suite : −1 ;
   - si tu as eu 3 séances très dures dans la semaine : la cible ne bouge sur aucun exercice (consolidation) ;
   - en haut de la fourchette, l'app te propose le **niveau suivant** (par exemple frog → crow) et la cible repart du bas.
-  - Le fractionné progresse en nombre de répétitions (6 → 8). Le yoga et les échauffements ne progressent pas.
+- **Semaine type** : lundi push, mardi pull, mercredi technique, jeudi yoga (vidéo YouTube, tu marques la séance comme faite), vendredi full body, samedi et dimanche repos (objectif : marcher).
 - **Synchro cloud avec Firebase** (optionnelle), plus une sauvegarde manuelle en `.json`.
 
 Les données de l'ancienne version (`calisthenie.v1`) sont reprises automatiquement au premier lancement.
