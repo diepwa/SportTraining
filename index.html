@@ -222,6 +222,8 @@ textarea { resize: vertical; min-height: 44px; }
 .check { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
 .check input { width: 20px; height: 20px; }
 .err { color: #C23B3B; }
+.panel .check { margin: 10px 0; }
+.panel .check + .hint { margin: 8px 0 12px; }
 
 @media (max-width: 380px) {
   .hero h1 { font-size: 2.2rem; }
@@ -682,14 +684,13 @@ textarea { resize: vertical; min-height: 44px; }
       h += '<div class="ex-head"><div><h3>' + esc(e.name) + '</h3>' + (e.variant ? '<div class="variant">' + esc(e.variant) + '</div>' : '') + '</div><div class="spec">' + spec +
         (e.rest ? '<em>repos ' + fmt(parseInt(e.rest, 10) || 0) + '</em>' : '') + '</div></div>';
       if (isProg(e)) {
-        var c = changeOf(e, mon), range = e.kind === 'sets' ? e.lo + '-' + e.hi + ' séries' : fmtV(e, e.lo) + ' à ' + fmtV(e, e.hi);
-        var line = 'Fourchette ' + range;
+        var c = changeOf(e, mon), line = 'Palier visé ' + (e.kind === 'sets' ? e.hi + ' séries' : fmtV(e, e.hi));
         if (c && c.dir === 1) line += ' · <b class="up">↑ ' + fmtV(e, c.from) + ' → ' + fmtV(e, c.to) + '</b> ' + esc(c.why);
         else if (c && c.dir === -1) line += ' · <b class="down">↓ ' + fmtV(e, c.from) + ' → ' + fmtV(e, c.to) + '</b> ' + esc(c.why);
         else if (c && c.why) line += ' · <b>=</b> ' + esc(c.why);
         h += '<p class="chg">' + line + '</p>';
         if (t.ready && weekOff === 0) {
-          h += '<div class="lvl"><p>Tu tiens le haut de la fourchette. ' + (e.next ? 'Niveau suivant : <b>' + esc(e.next) + '</b>.' : 'Rends l’exercice plus dur dans « Modifier ».') + '</p>' +
+          h += '<div class="lvl"><p>Tu as atteint le palier visé. ' + (e.next ? 'Niveau suivant : <b>' + esc(e.next) + '</b>.' : 'Rends l’exercice plus dur dans « Modifier ».') + '</p>' +
             (e.next ? '<button type="button" class="btn primary" data-act="levelUp" data-id="' + esc(e.id) + '">Passer au niveau suivant</button>' : '') + '</div>';
         }
       }
@@ -854,7 +855,12 @@ textarea { resize: vertical; min-height: 44px; }
 
   function dumpJson() { return JSON.stringify({ v: 2, program: state.program, weeks: state.weeks, logs: state.logs, records: state.records }); }
   function renderCompte() {
-    var h = '<div class="histo"><section class="panel"><h2>Synchro cloud</h2>';
+    var h = '<div class="histo"><section class="panel"><h2>Sons du minuteur</h2>' +
+      '<label class="check"><input type="checkbox" data-pref="warn"' + (prefs.warn ? ' checked' : '') + '> Signal quand il reste 15 secondes de repos</label>' +
+      '<label class="check"><input type="checkbox" data-pref="bg"' + (prefs.bg ? ' checked' : '') + '> Garder le son si l’app est en arrière-plan ou l’écran verrouillé</label>' +
+      '<p class="hint">Le son en arrière-plan passe par un fichier audio lancé à chaque repos. Sur iPhone, il peut mettre ta musique en pause. Décoche-le pour garder ta musique : le signal ne sonnera alors que lorsque l’app est à l’écran.</p>' +
+      '<div class="edit-actions"><button type="button" class="btn" data-act="testSound">Tester le son</button></div></section>' +
+      '<section class="panel"><h2>Synchro cloud</h2>';
     if (!FIREBASE_CONFIG) {
       h += '<p class="hint">La synchro n’est pas encore configurée : tes données restent sur cet appareil. Pour l’activer, crée le projet Firebase et colle sa config en haut de <code>index.html</code> (guide dans le README).</p>';
     } else if (cloud.status === 'loading') {
@@ -921,15 +927,59 @@ textarea { resize: vertical; min-height: 44px; }
   var timerEl = document.getElementById('timer'), timerTime = document.getElementById('timerTime');
   var timerLbl = document.getElementById('timerLbl'), timerProg = document.getElementById('timerProg');
   var timer = null, tickId = null, hideId = null, audio = null;
-  function beep() {
+  var PREFS_KEY = 'calisthenie.prefs', prefs = { warn: true, bg: true };
+  try { var pr0 = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'); if (pr0.warn === false) prefs.warn = false; if (pr0.bg === false) prefs.bg = false; } catch (e) {}
+  function savePrefs() { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) {} }
+
+  function beep(kind) {
     try {
       if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)();
-      var o = audio.createOscillator(), g = audio.createGain();
-      o.frequency.value = 880; g.gain.value = 0.15;
-      o.connect(g); g.connect(audio.destination);
-      o.start(); o.stop(audio.currentTime + 0.35);
+      var t0 = audio.currentTime;
+      (kind === 'warn' ? [[660, 0, 0.12], [660, 0.2, 0.12]] : [[880, 0, 0.35]]).forEach(function (n) {
+        var o = audio.createOscillator(), g = audio.createGain();
+        o.frequency.value = n[0]; g.gain.value = 0.15;
+        o.connect(g); g.connect(audio.destination);
+        o.start(t0 + n[1]); o.stop(t0 + n[1] + n[2]);
+      });
     } catch (e) {}
-    try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) {}
+    try { if (navigator.vibrate) navigator.vibrate(kind === 'warn' ? [120] : [200, 100, 200]); } catch (e) {}
+  }
+
+  /* Son en arrière-plan : un navigateur coupe les minuteurs d'une page en arrière-plan, mais pas la lecture d'un fichier audio
+     lancé par un tap. On fabrique donc un petit WAV (silence + bips aux bons instants) qu'on lit avec un élément <audio>. */
+  var bgEl = null, bgUrl = '';
+  function buildWav(secs, warnAt) {
+    var rate = 8000, len = Math.ceil((secs + 1) * rate), buf = new Uint8Array(44 + len), dv = new DataView(buf.buffer);
+    function str(o, t) { for (var i = 0; i < t.length; i++) buf[o + i] = t.charCodeAt(i); }
+    str(0, 'RIFF'); dv.setUint32(4, 36 + len, true); str(8, 'WAVE'); str(12, 'fmt '); dv.setUint32(16, 16, true);
+    dv.setUint16(20, 1, true); dv.setUint16(22, 1, true); dv.setUint32(24, rate, true); dv.setUint32(28, rate, true);
+    dv.setUint16(32, 1, true); dv.setUint16(34, 8, true); str(36, 'data'); dv.setUint32(40, len, true);
+    buf.fill(128, 44);
+    function tone(at, dur, freq) {
+      var a = Math.floor(at * rate), n = Math.floor(dur * rate), ramp = Math.floor(0.008 * rate);
+      for (var i = 0; i < n && a + i < len; i++) {
+        var env = Math.min(1, i / ramp, (n - i) / ramp);
+        buf[44 + a + i] = 128 + Math.round(70 * env * Math.sin(2 * Math.PI * freq * i / rate));
+      }
+    }
+    if (warnAt >= 0) { tone(warnAt, 0.12, 660); tone(warnAt + 0.2, 0.12, 660); }
+    tone(secs, 0.35, 880);
+    return new Blob([buf], { type: 'audio/wav' });
+  }
+  function stopBg() { try { if (bgEl) { bgEl.pause(); } } catch (e) {} if (timer) timer.viaAudio = false; }
+  function startBg(secs, label) {
+    if (!prefs.bg) return;
+    try {
+      if (!bgEl) { bgEl = new Audio(); bgEl.preload = 'auto'; bgEl.setAttribute('playsinline', ''); }
+      if (bgUrl) URL.revokeObjectURL(bgUrl);
+      bgUrl = URL.createObjectURL(buildWav(secs, prefs.warn && secs > 15 ? secs - 15 : -1));
+      bgEl.src = bgUrl;
+      try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+      try { if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: 'Repos · ' + label, artist: 'Calisthénie' }); } catch (e) {}
+      var pl = bgEl.play();
+      if (timer) timer.viaAudio = true;
+      if (pl && pl.catch) pl.catch(function () { if (timer) timer.viaAudio = false; });
+    } catch (e) { if (timer) timer.viaAudio = false; }
   }
   function warmAudio() {
     try { if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)(); if (audio.state === 'suspended') audio.resume(); } catch (e) {}
@@ -937,23 +987,29 @@ textarea { resize: vertical; min-height: 44px; }
   function startTimer(sec, label) {
     if (!sec) return;
     clearTimeout(hideId);
-    timer = { end: Date.now() + sec * 1000, total: sec, label: label, finished: false };
+    timer = { end: Date.now() + sec * 1000, total: sec, label: label, finished: false, warned: sec <= 15, viaAudio: false };
+    startBg(sec, label);
     timerEl.hidden = false; timerEl.classList.remove('done');
     timerLbl.textContent = 'Repos · ' + label;
     if (!tickId) tickId = setInterval(tick, 250);
     tick();
   }
-  function stopTimer() { clearInterval(tickId); tickId = null; timer = null; clearTimeout(hideId); timerEl.hidden = true; }
+  function stopTimer() { stopBg(); clearInterval(tickId); tickId = null; timer = null; clearTimeout(hideId); timerEl.hidden = true; }
   function tick() {
     if (!timer) return;
     var left = Math.ceil((timer.end - Date.now()) / 1000);
     if (left <= 0) {
       if (!timer.finished) {
-        timer.finished = true; beep();
+        timer.finished = true;
+        if (timer.viaAudio) { try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) {} } else beep('end');
         timerEl.classList.add('done'); timerTime.textContent = '0:00'; timerLbl.textContent = 'C’est reparti'; timerProg.style.width = '100%';
         clearInterval(tickId); tickId = null; hideId = setTimeout(stopTimer, 5000);
       }
       return;
+    }
+    if (left <= 15 && !timer.warned) {
+      timer.warned = true;
+      if (prefs.warn && !timer.viaAudio) beep('warn');
     }
     timerTime.textContent = fmt(left);
     timerProg.style.width = Math.max(0, Math.min(100, 100 * (1 - left / timer.total))) + '%';
@@ -966,6 +1022,10 @@ textarea { resize: vertical; min-height: 44px; }
     var add = parseInt(a, 10) || 0;
     if (timer.finished) return;
     timer.end += add * 1000; timer.total = Math.max(1, timer.total + add);
+    var left = Math.ceil((timer.end - Date.now()) / 1000);
+    if (left <= 0) { stopTimer(); return; }
+    timer.warned = left <= 15;
+    startBg(left, timer.label);
     tick();
   });
 
@@ -1052,6 +1112,18 @@ textarea { resize: vertical; min-height: 44px; }
       } catch (e) { if (imsg) imsg.textContent = 'Texte illisible. Colle la sauvegarde complète.'; }
       return;
     }
+    if (act === 'testSound') {
+      warmAudio();
+      if (prefs.bg) {
+        try {
+          if (!bgEl) { bgEl = new Audio(); bgEl.setAttribute('playsinline', ''); }
+          if (bgUrl) URL.revokeObjectURL(bgUrl);
+          bgUrl = URL.createObjectURL(buildWav(3, 0.4)); bgEl.src = bgUrl;
+          var tp = bgEl.play(); if (tp && tp.catch) tp.catch(function () { beep('warn'); });
+        } catch (e) { beep('warn'); }
+      } else { beep('warn'); setTimeout(function () { beep('end'); }, 2500); }
+      return;
+    }
     if (act === 'signIn' || act === 'signUp') { authAction(act); return; }
     if (act === 'resetPw') { authAction(act); return; }
     if (act === 'signOut') { authAction(act); return; }
@@ -1129,6 +1201,8 @@ textarea { resize: vertical; min-height: 44px; }
 
   mainEl.addEventListener('change', function (ev) {
     var t = ev.target, df = t.getAttribute('data-day-field');
+    var pf = t.getAttribute('data-pref');
+    if (pf) { prefs[pf] = t.checked; savePrefs(); return; }
     if (df) { state.program[sel][df] = t.value; touchMain(); save(); return; }
     var id = t.getAttribute('data-id'), field = t.getAttribute('data-field');
     if (!id || !field) return;
@@ -1274,7 +1348,7 @@ textarea { resize: vertical; min-height: 44px; }
       });
     }).catch(function () { setStatus('error', 'Impossible de charger Firebase (hors ligne ?). L’app marche quand même en local.'); });
   }
-  window.__calisthenie = { state: function () { return state; }, computeWeek: computeWeek, ensureWeeks: ensureWeeks, setFirebaseConfig: function (c) { FIREBASE_CONFIG = c; cloud.status = 'loading'; cloudInit(); render(); } };
+  window.__calisthenie = { state: function () { return state; }, bg: function () { return bgEl ? { src: bgEl.src, paused: bgEl.paused, viaAudio: !!(timer && timer.viaAudio) } : null; }, buildWav: buildWav, computeWeek: computeWeek, ensureWeeks: ensureWeeks, setFirebaseConfig: function (c) { FIREBASE_CONFIG = c; cloud.status = 'loading'; cloudInit(); render(); } };
 
   if (ensureWeeks()) saveLocal();
   saveLocal();
