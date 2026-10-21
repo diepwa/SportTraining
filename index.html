@@ -230,7 +230,11 @@ textarea { resize: vertical; min-height: 44px; }
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
 .bodymap { width: 100%; height: auto; display: block; }
 .bodymap .body-base { fill: var(--line); stroke: none; }
-.bodymap .m-base { fill: var(--surface); stroke: var(--line); stroke-width: 0.8; }
+.bodymap .m-base { fill: var(--surface); stroke: var(--muted); stroke-opacity: 0.55; stroke-width: 0.6; stroke-linejoin: round; }
+.bodymap .m-ctx { fill: color-mix(in srgb, var(--line) 45%, var(--surface)); stroke: var(--muted); stroke-opacity: 0.35; stroke-width: 0.5; stroke-linejoin: round; }
+.bodymap .m-fib { stroke: none; pointer-events: none; }
+.bodymap .fibl { stroke: var(--fg); stroke-opacity: 0.2; stroke-width: 0.45; }
+.bodymap .m-line { fill: none; stroke: var(--muted); stroke-opacity: 0.6; stroke-width: 0.6; stroke-linecap: round; pointer-events: none; }
 .bodymap .m-heat { fill: var(--accent); stroke: none; pointer-events: none; }
 .bodymap .m-hit { fill: transparent; stroke: none; cursor: pointer; }
 .bodymap .m-hit.on { stroke: var(--fg); stroke-width: 1.6; }
@@ -239,6 +243,17 @@ textarea { resize: vertical; min-height: 44px; }
 .legend i { flex: 1; height: 8px; border-radius: 4px; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 20%, var(--surface)), var(--accent)); border: 1px solid var(--line); }
 .musc li { grid-template-columns: 84px minmax(0, 1fr) 138px; }
 .musc li .mono { text-align: right; font-size: 0.8rem; }
+.mrow { cursor: pointer; border-radius: 8px; padding: 4px 6px; }
+.mdetail .hint { margin: 8px 0 0; }
+.mrow.on { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); outline: 1px solid var(--accent); }
+.mdetail { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.mhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.mhead h3 { margin: 0; font-family: var(--font-display); font-size: 1.1rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.mex { margin-top: 8px; }
+.mex li { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.mex li > span:first-child { display: flex; flex-direction: column; min-width: 0; }
+.mex li .mono { display: flex; flex-direction: column; align-items: flex-end; }
+.mex small { color: var(--muted); font-size: 0.72rem; }
 .musc small { color: var(--muted); font-size: 0.72rem; }
 .mbar { height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; }
 .mbar i { display: block; height: 100%; background: var(--accent); }
@@ -908,78 +923,146 @@ textarea { resize: vertical; min-height: 44px; }
   }
   function muscleLoads(mon, mode) {
     var L = {}, unmapped = [], seen = {};
-    MUSCLES.forEach(function (k) { L[k] = { sets: 0, vol: 0 }; });
-    function add(e, sets, units) {
+    MUSCLES.forEach(function (k) { L[k] = { sets: 0, vol: 0, ex: {} }; });
+    function add(e, sets, units, di) {
       var w = moveOf(e);
       if (!w) { if (!seen[e.name]) { seen[e.name] = 1; unmapped.push(e.name); } return; }
-      Object.keys(w).forEach(function (m) { L[m].sets += sets * w[m]; L[m].vol += sets * units * w[m]; });
+      Object.keys(w).forEach(function (m) {
+        L[m].sets += sets * w[m]; L[m].vol += sets * units * w[m];
+        var x = L[m].ex[e.name] || (L[m].ex[e.name] = { name: e.name, w: w[m], n: 0, vol: 0, days: [] });
+        x.n += sets; x.vol += sets * units * w[m];
+        if (x.days.indexOf(di) < 0) x.days.push(di);
+      });
     }
     if (mode === 'plan') {
-      state.program.forEach(function (d) { d.exercises.forEach(function (e) { var t = tgt(e, mon); add(e, planned(e, t), unitsOf(e, t.t)); }); });
+      state.program.forEach(function (d, di) { d.exercises.forEach(function (e) { var t = tgt(e, mon); add(e, planned(e, t), unitsOf(e, t.t), di); }); });
     } else {
       liveLogs(mon, addDays(mon, 6)).forEach(function (l) {
         var d = state.program[l.dayIdx]; if (!d) return;
         d.exercises.forEach(function (e) {
-          if (e.max) { if (l.max && l.max[e.id] != null) add(e, 1, l.max[e.id]); return; }
+          if (e.max) { if (l.max && l.max[e.id] != null) add(e, 1, l.max[e.id], l.dayIdx); return; }
           var vals = (l.sets && l.sets[e.id]) || []; if (!vals.length) return;
           var sum = 0; vals.forEach(function (v) { sum += unitsOf(e, e.kind === 'sets' ? null : v); });
-          add(e, vals.length, sum / vals.length);
+          add(e, vals.length, sum / vals.length, l.dayIdx);
         });
       });
     }
     return { L: L, unmapped: unmapped };
   }
 
-  /* Silhouette : moitié droite dessinée, la gauche est son miroir. Repère 200 × 400, axe en x = 100. */
+  /* Écorché : moitié droite dessinée, la gauche est son miroir. Repère 200 × 400, axe en x = 100.
+     Chaque forme : d = contour, a = angle des fibres (0 = horizontal, 90 = vertical, null = sans fibres).
+     « ctx » = muscles non suivis, dessinés pour que la figure reste lisible. */
   var BODY = {
-    outline: 'M100,49 L108,49 C109,58 113,63 122,67 L148,73 C158,75 165,82 167,94 L173,132 C175,142 177,150 178,158 L187,204 C188,211 190,220 191,230 L193,243 C193,250 187,253 184,247 L180,236 C177,228 176,220 174,212 L165,171 C164,160 162,150 160,140 L157,101 L150,108 C148,128 142,152 135,171 C133,182 139,196 141,206 C144,232 145,262 142,290 C141,300 140,312 138,326 C137,346 136,360 134,372 L134,388 C135,396 128,399 118,399 L111,397 C111,382 112,370 112,360 C111,340 108,320 106,300 C104,280 102,250 102,226 L100,215 Z',
+    outline: 'M100,49 L109,49 C110,56 112,62 118,66 C128,70 142,70 150,72 C160,73 168,78 171,90 C173,106 174,126 176,142 C178,152 180,160 182,172 C185,188 188,202 190,216 C192,226 194,236 194,244 C192,251 186,251 184,244 C182,238 179,228 176,218 C172,204 168,186 166,168 C164,152 162,138 160,126 C158,118 155,112 153,108 C151,126 147,148 140,168 C138,180 140,194 144,206 C148,222 148,240 146,260 C146,276 144,292 142,306 C142,318 142,334 139,352 C138,362 137,372 136,380 L137,392 C137,398 128,401 118,400 C112,399 112,392 113,384 C113,370 113,356 112,342 C111,326 110,314 108,302 C106,286 104,260 103,240 C102,232 101,226 100,218 Z',
+    head: 'M100,6 C109,6 115,13 115,25 C115,33 113,39 111,43 C109,47 106,49 103,50 L100,50 Z',
+    ear: 'M115,23 C119,22 120,29 117,33 C116,33 115,31 115,29 Z',
     front: {
-      traps: 'M108,52 C109,60 112,64 120,68 L146,74 L134,78 C124,74 114,68 108,60 Z',
-      delts: 'M122,70 C136,68 150,72 158,80 C166,88 168,100 166,112 C158,108 152,102 148,96 C142,88 132,80 122,76 Z',
-      pecs: 'M102,86 C112,81 124,79 134,83 C142,87 148,95 148,105 C146,115 136,121 124,122 C114,123 106,119 102,113 Z',
-      biceps: 'M158,102 C164,108 167,120 169,134 C169,142 167,148 165,151 L161,147 C159,136 157,120 156,106 Z',
-      forearms: 'M165,164 C170,160 176,160 178,163 L186,204 C187,209 185,212 182,213 L176,211 C171,198 167,180 165,164 Z',
-      abs: ['M102,126 L115,126 C116,132 116,138 115,142 L102,142 Z', 'M102,146 L115,146 C116,152 116,158 115,162 L102,162 Z', 'M102,166 L114,166 C115,172 114,178 112,184 L102,184 Z'],
-      obliques: 'M118,126 L143,119 C141,138 137,156 135,172 C134,180 136,188 138,196 L121,190 C119,170 118,148 118,126 Z',
-      quads: 'M104,216 C112,218 130,216 140,207 C143,232 144,262 141,288 L138,296 C128,300 116,298 108,294 C104,270 102,240 104,216 Z',
-      calves: 'M108,302 C116,304 130,304 139,300 C140,318 138,336 134,350 C130,358 124,360 120,358 C114,346 110,324 108,302 Z'
+      traps: [{ d: 'M109,55 C113,62 123,67 147,72 L143,80 C128,76 114,71 106,63 Z', a: 35 }],
+      delts: [
+        { d: 'M141,81 C147,76 155,76 160,82 L162,100 C162,108 160,112 158,115 C152,109 148,99 145,91 Z', a: 70 },
+        { d: 'M160,79 C166,79 171,85 172,95 C173,104 172,112 169,120 L163,118 C163,108 162,92 160,79 Z', a: 95 }
+      ],
+      pecs: [
+        { d: 'M102,80 C112,78 128,78 140,82 C144,84 146,88 147,92 C138,89 126,88 116,89 L101,91 Z', a: -18 },
+        { d: 'M101,92 C110,88 124,88 136,92 C142,95 146,100 146,106 C142,113 132,118 120,119 C112,119 105,117 101,113 Z', a: 12 }
+      ],
+      biceps: [{ d: 'M160,116 C166,113 171,119 173,131 C174,140 173,148 171,154 L164,154 C162,144 160,130 160,116 Z', a: 88 }],
+      forearms: [{ d: 'M165,157 C171,154 178,156 180,163 C183,177 186,193 188,209 L183,211 C176,201 170,185 165,171 Z', a: 78 }],
+      abs: [
+        { d: 'M101,122 L117,122 C118,128 118,134 117,139 L101,140 Z', a: null },
+        { d: 'M101,143 L118,143 C119,149 119,154 118,159 L101,160 Z', a: null },
+        { d: 'M101,163 L118,163 C119,169 118,175 116,180 L101,181 Z', a: null },
+        { d: 'M101,184 L115,184 C115,190 113,196 109,202 L101,207 Z', a: null }
+      ],
+      obliques: [{ d: 'M121,124 C128,124 136,120 142,117 C146,130 143,148 139,164 C137,176 140,188 145,200 C139,202 132,200 125,196 L120,188 C122,168 122,146 121,124 Z', a: 58 }],
+      quads: [
+        { d: 'M114,226 C122,226 128,232 130,244 C131,262 130,280 128,292 C124,296 118,296 115,292 C113,276 112,250 114,226 Z', a: 90 },
+        { d: 'M130,228 C138,226 144,230 146,238 C147,258 145,280 141,296 C137,298 132,296 129,292 C131,278 132,254 130,228 Z', a: 80 },
+        { d: 'M103,236 C108,232 113,230 113,238 C112,256 113,276 116,292 C116,298 116,300 114,300 C110,300 107,296 106,290 C103,270 102,252 103,236 Z', a: 105 }
+      ],
+      calves: [
+        { d: 'M127,314 C132,309 139,311 140,319 C142,334 140,350 136,364 C133,367 131,365 130,359 C128,344 127,328 127,314 Z', a: 88 },
+        { d: 'M111,314 C115,309 121,310 124,314 C125,330 125,348 123,364 C120,366 118,365 117,360 C113,346 111,330 111,314 Z', a: 92 }
+      ]
     },
+    frontCtx: [
+      { d: 'M137,118 C142,116 147,113 151,111 L151,120 L146,121 L150,128 L144,129 L147,137 L141,136 L142,144 L138,140 Z', a: null },
+      { d: 'M126,200 C134,202 142,204 146,208 C148,216 147,224 144,230 C138,224 130,214 126,200 Z', a: 70 },
+      { d: 'M116,296 C122,294 128,296 128,302 C128,308 122,312 116,311 C112,308 112,300 116,296 Z', a: null },
+      { d: 'M116,364 L135,364 C135,370 136,376 136,381 L114,383 C114,376 115,370 116,364 Z', a: 85 }
+    ],
+    frontLines: ['M125,312 L125,364', 'M100,78 L100,207', 'M103,75 C116,73 132,73 146,77', 'M122,201 C114,209 108,217 104,226'],
     back: {
-      traps: 'M100,52 L108,52 C110,60 118,66 128,70 L146,74 C140,80 130,86 120,96 C112,104 106,112 100,128 Z',
-      delts: 'M128,74 C140,72 152,76 158,82 C166,90 168,102 166,114 C158,110 150,104 146,96 C142,88 136,80 128,76 Z',
-      upperback: 'M106,100 C114,93 128,91 142,95 L148,105 C140,112 126,116 114,114 L106,112 Z',
-      lats: 'M104,120 C116,118 130,112 146,108 C144,130 138,152 128,172 C120,176 112,174 106,168 Z',
-      lowback: 'M102,134 L114,134 L116,176 C112,188 106,192 102,194 Z',
-      triceps: 'M158,98 C164,104 168,118 170,134 C170,142 168,148 166,152 L160,146 C157,134 156,118 156,104 Z',
-      forearms: 'M165,164 C170,160 176,160 178,163 L186,204 C187,209 185,212 182,213 L176,211 C171,198 167,180 165,164 Z',
-      glutes: 'M101,196 C112,192 130,194 140,204 C142,214 138,224 130,230 C118,232 106,228 101,222 Z',
-      hams: 'M103,232 C114,238 130,238 141,228 C144,252 144,274 141,290 C130,296 116,296 108,292 C104,270 102,250 103,232 Z',
-      calves: 'M108,302 C116,304 130,304 139,300 C140,318 138,336 134,350 C130,358 124,360 120,358 C114,346 110,324 108,302 Z'
-    }
+      traps: [
+        { d: 'M101,50 L109,50 C111,58 118,65 130,69 L148,74 C142,82 134,86 126,90 C116,82 108,76 101,72 Z', a: -35 },
+        { d: 'M101,74 C110,80 118,88 126,94 C122,106 114,118 108,132 C105,140 102,146 100,152 Z', a: 60 }
+      ],
+      delts: [{ d: 'M140,80 C148,74 160,76 168,84 C172,94 172,106 169,119 L163,117 C160,108 154,96 146,90 Z', a: 100 }],
+      upperback: [
+        { d: 'M128,96 C136,92 146,92 152,96 C154,104 152,112 148,118 C140,122 132,118 128,112 Z', a: 12 },
+        { d: 'M142,119 C148,117 154,119 156,123 C154,131 148,135 142,133 Z', a: 40 },
+        { d: 'M104,92 C112,94 120,100 126,106 C124,114 118,122 111,128 C106,120 104,106 104,92 Z', a: 40 }
+      ],
+      lats: [{ d: 'M146,122 C150,130 146,144 138,160 C130,174 118,186 104,192 L104,162 C112,152 122,140 130,128 C136,124 142,122 146,122 Z', a: 52 }],
+      lowback: [{ d: 'M101,140 L110,140 C112,156 112,172 110,190 L101,195 Z', a: 90 }],
+      triceps: [
+        { d: 'M166,108 C171,108 175,116 175,130 C176,140 175,148 173,154 L168,154 C168,140 167,124 166,108 Z', a: 88 },
+        { d: 'M158,110 C162,106 166,110 166,120 C167,134 168,146 167,154 L163,154 C160,141 158,126 158,110 Z', a: 92 }
+      ],
+      forearms: [{ d: 'M165,157 C171,154 178,156 180,163 C183,177 186,193 188,209 L183,211 C176,201 170,185 165,171 Z', a: 78 }],
+      glutes: [{ d: 'M101,198 C114,192 132,194 144,206 C148,218 144,232 134,238 C122,242 108,238 101,228 Z', a: 30 }],
+      hams: [
+        { d: 'M123,242 C132,242 140,240 145,234 C147,254 145,278 141,296 C136,300 130,300 126,298 C124,278 123,260 123,242 Z', a: 90 },
+        { d: 'M102,232 C108,240 116,244 122,244 C122,262 124,280 126,298 C118,300 112,298 108,294 C104,276 102,254 102,232 Z', a: 90 }
+      ],
+      calves: [
+        { d: 'M124,308 C132,306 139,308 140,316 C141,332 138,346 134,354 C130,356 126,352 124,344 C123,332 123,318 124,308 Z', a: 88 },
+        { d: 'M109,308 C115,306 121,308 122,310 C122,324 122,340 121,350 C118,354 114,352 112,346 C110,334 109,320 109,308 Z', a: 92 }
+      ]
+    },
+    backCtx: [
+      { d: 'M113,347 C118,353 126,353 132,351 C134,359 134,366 134,374 L116,374 C114,364 113,356 113,347 Z', a: 90 },
+      { d: 'M120,190 C130,190 140,196 144,204 C138,202 128,200 120,198 Z', a: 40 }
+    ],
+    backLines: ['M100,56 L100,198', 'M109,297 C118,301 130,301 141,297']
   };
   function bodySvg(L, max, selKey) {
+    var pats = {};
+    function pat(a) {
+      var id = 'fib' + (a < 0 ? 'n' + (-a) : a);
+      pats[id] = '<pattern id="' + id + '" width="3.4" height="3.4" patternUnits="userSpaceOnUse" patternTransform="rotate(' + (a - 90) + ')"><line class="fibl" x1="0" y1="0" x2="0" y2="3.4"/></pattern>';
+      return id;
+    }
+    function both(d, fn) { return fn(d, '') + fn(d, ' transform="translate(200,0) scale(-1,1)"'); }
     function fig(side, x0) {
-      var g = '<g transform="translate(' + x0 + ',0)"><g class="body-base">' +
-        '<ellipse cx="100" cy="28" rx="16" ry="20"/>' +
+      var g = '<g transform="translate(' + x0 + ',0)"><g class="body-base"><path d="' + BODY.head + '"/><path d="' + BODY.head + '" transform="translate(200,0) scale(-1,1)"/>' +
+        '<path d="' + BODY.ear + '"/><path d="' + BODY.ear + '" transform="translate(200,0) scale(-1,1)"/>' +
         '<path d="' + BODY.outline + '"/><path d="' + BODY.outline + '" transform="translate(200,0) scale(-1,1)"/></g>';
-      var shapes = BODY[side];
+      var shapes = BODY[side], ctx = BODY[side + 'Ctx'] || [];
+      function fib(s, tr) { return s.a == null ? '' : '<path class="m-fib" fill="url(#' + pat(s.a) + ')" d="' + s.d + '"' + tr + '/>'; }
+      ctx.forEach(function (s) { g += both(s, function (x, tr) { return '<path class="m-ctx" d="' + s.d + '"' + tr + '/>' + fib(s, tr); }); });
       Object.keys(shapes).forEach(function (m) {
-        var ds = [].concat(shapes[m]), v = L[m] ? L[m].vol : 0, t = max ? Math.pow(v / max, 0.8) : 0;
+        var v = L[m] ? L[m].vol : 0, t = max ? Math.pow(v / max, 0.8) : 0;
         var op = v > 0 ? (0.2 + 0.8 * t).toFixed(2) : 0;
-        ds.forEach(function (d) {
-          [0, 1].forEach(function (mir) {
-            var tr = mir ? ' transform="translate(200,0) scale(-1,1)"' : '';
-            g += '<path class="m-base" d="' + d + '"' + tr + '/>';
-            if (v > 0) g += '<path class="m-heat" data-m="' + m + '" style="opacity:' + op + '" d="' + d + '"' + tr + '/>';
-            g += '<path class="m-hit' + (selKey === m ? ' on' : '') + '" data-m="' + m + '" d="' + d + '"' + tr + '/>';
+        shapes[m].forEach(function (s) {
+          g += both(s, function (x, tr) {
+            return '<path class="m-base" d="' + s.d + '"' + tr + '/>' +
+              (v > 0 ? '<path class="m-heat" style="opacity:' + op + '" d="' + s.d + '"' + tr + '/>' : '') + fib(s, tr);
           });
+        });
+      });
+      (BODY[side + 'Lines'] || []).forEach(function (d) { g += both(d, function (x, tr) { return '<path class="m-line" d="' + d + '"' + tr + '/>'; }); });
+      Object.keys(shapes).forEach(function (m) {
+        shapes[m].forEach(function (s) {
+          g += both(s, function (x, tr) { return '<path class="m-hit' + (selKey === m ? ' on' : '') + '" data-m="' + m + '" d="' + s.d + '"' + tr + '/>'; });
         });
       });
       return g + '</g>';
     }
-    return '<svg class="bodymap" viewBox="0 0 410 420" role="img" aria-label="Muscles sollicités, vue de face et de dos">' +
-      fig('front', 0) + fig('back', 210) +
-      '<text class="ax" x="100" y="414" text-anchor="middle">FACE</text><text class="ax" x="310" y="414" text-anchor="middle">DOS</text></svg>';
+    var body = fig('front', 0) + fig('back', 210);
+    return '<svg class="bodymap" viewBox="0 0 410 420" role="img" aria-label="Muscles sollicités, vue de face et de dos"><defs>' + Object.keys(pats).map(function (k) { return pats[k]; }).join('') + '</defs>' +
+      body + '<text class="ax" x="100" y="414" text-anchor="middle">FACE</text><text class="ax" x="310" y="414" text-anchor="middle">DOS</text></svg>';
   }
   var musMode = 'plan', musSel = '';
   function renderMuscles() {
@@ -991,9 +1074,22 @@ textarea { resize: vertical; min-height: 44px; }
     h += '<section class="panel">' + bodySvg(L, max, musSel) +
       '<div class="legend"><span>Peu</span><i></i><span>Beaucoup</span></div>';
     if (musSel && L[musSel]) {
-      h += '<p class="readout"><b>' + MUSCLE_NAME[musSel] + '</b> · ' + (Math.round(L[musSel].sets * 10) / 10) + ' séries pondérées · ' + Math.round(L[musSel].vol) + ' reps pondérées · ' + (max ? Math.round(100 * L[musSel].vol / max) : 0) + ' % du muscle le plus sollicité</p>';
+      var S = L[musSel], list = Object.keys(S.ex).map(function (k) { return S.ex[k]; }).sort(function (a, b) { return b.vol - a.vol; });
+      h += '<div class="mdetail"><div class="mhead"><h3>' + MUSCLE_NAME[musSel] + '</h3><button type="button" class="btn" data-act="musClose">Fermer</button></div>' +
+        '<p class="readout">' + (Math.round(S.sets * 10) / 10) + ' séries pondérées · ' + Math.round(S.vol) + ' reps pondérées · ' + (max ? Math.round(100 * S.vol / max) : 0) + ' % du muscle le plus sollicité</p>';
+      if (!list.length) h += '<p class="hint">' + (musMode === 'done' ? 'Aucun exercice réalisé cette semaine ne sollicite ce muscle.' : 'Aucun exercice du programme ne sollicite ce muscle.') + '</p>';
+      else {
+        h += '<ul class="prog mex">';
+        list.forEach(function (x) {
+          var role = x.w >= 0.8 ? 'Principal' : x.w >= 0.5 ? 'Important' : 'Secondaire';
+          h += '<li><span>' + esc(x.name) + '<small>' + role + ' · ' + x.days.sort().map(function (d) { return DAY_SHORT[d]; }).join(', ') + '</small></span>' +
+            '<span class="mono">' + (S.vol ? Math.round(100 * x.vol / S.vol) : 0) + ' %<small>' + (Math.round(x.n * 10) / 10) + ' sér.</small></span></li>';
+        });
+        h += '</ul><p class="hint">Part de chaque exercice dans le travail de ce muscle cette semaine.</p>';
+      }
+      h += '</div>';
     } else {
-      h += '<p class="readout">' + (musMode === 'plan' ? 'Calculé à partir du programme de la semaine.' : 'Calculé à partir de ce que tu as réellement fait cette semaine.') + ' Touche un muscle pour le détail.</p>';
+      h += '<p class="readout">' + (musMode === 'plan' ? 'Calculé à partir du programme de la semaine.' : 'Calculé à partir de ce que tu as réellement fait cette semaine.') + ' Touche un muscle, sur le dessin ou dans la liste, pour voir les exercices concernés.</p>';
     }
     h += '</section>';
     if (!any) {
@@ -1003,7 +1099,7 @@ textarea { resize: vertical; min-height: 44px; }
       h += '<section class="panel"><h2>Du plus au moins travaillé</h2><ul class="prog musc">';
       rows.forEach(function (m) {
         var v = L[m].vol, pct = max ? Math.round(100 * v / max) : 0;
-        h += '<li><span>' + MUSCLE_NAME[m] + '</span><span class="mbar"><i style="width:' + pct + '%"></i></span><span class="mono">' + (v > 0 ? Math.round(v) + ' rép. <small>' + (Math.round(L[m].sets * 10) / 10) + ' sér.</small>' : '—') + '</span></li>';
+        h += '<li class="mrow' + (musSel === m ? ' on' : '') + '" data-act="musPick" data-id="' + m + '" role="button" tabindex="0"><span>' + MUSCLE_NAME[m] + '</span><span class="mbar"><i style="width:' + pct + '%"></i></span><span class="mono">' + (v > 0 ? Math.round(v) + ' rép. <small>' + (Math.round(L[m].sets * 10) / 10) + ' sér.</small>' : '—') + '</span></li>';
       });
       h += '</ul><p class="readout">Les barres et le dégradé comparent tes muscles sur les « reps pondérées » : séries × reps × part du muscle dans le mouvement (3 s de tenue comptent comme 1 rep). Une série de dips compte pour 1 sur les triceps et 0,6 sur les pectoraux. Le nombre de séries pondérées est indiqué à côté : un muscle peut avoir plus de séries mais moins de reps. Pas de travail de force des jambes au programme : elles bossent surtout en marchant.</p></section>';
     }
@@ -1204,9 +1300,17 @@ textarea { resize: vertical; min-height: 44px; }
   editBtn.addEventListener('click', function () { editing = !editing; confirmReset = false; selSet = null; render(); });
   chip.addEventListener('click', function () { view = 'compte'; editing = false; authMsg = ''; render(); });
 
+  function showDetail() {
+    var el = musSel && mainEl.querySelector('.mdetail');
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+  mainEl.addEventListener('keydown', function (ev) {
+    var r = ev.target.closest && ev.target.closest('.mrow');
+    if (r && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); r.click(); }
+  });
   mainEl.addEventListener('click', function (ev) {
     var mh = ev.target.closest && ev.target.closest('.m-hit');
-    if (mh) { var mk = mh.getAttribute('data-m'); musSel = musSel === mk ? '' : mk; render(); return; }
+    if (mh) { var mk = mh.getAttribute('data-m'); musSel = musSel === mk ? '' : mk; render(); showDetail(); return; }
     var b = ev.target.closest('[data-act]');
     if (!b || b.disabled) return;
     var act = b.getAttribute('data-act'), id = b.getAttribute('data-id');
@@ -1224,6 +1328,8 @@ textarea { resize: vertical; min-height: 44px; }
       finishOpen = false; finishFeel = null; stopTimer();
       save(); render(); return;
     }
+    if (act === 'musPick') { musSel = musSel === id ? '' : id; render(); showDetail(); return; }
+    if (act === 'musClose') { musSel = ''; render(); return; }
     if (act === 'musMode') { musMode = id; render(); return; }
     if (act === 'wk') { selWeek = parseInt(b.getAttribute('data-i'), 10) || 0; render(); return; }
     if (act === 'goto') {
