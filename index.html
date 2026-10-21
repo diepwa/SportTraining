@@ -314,19 +314,7 @@ textarea { resize: vertical; min-height: 44px; }
         ex('w4', 'Front lever tuck', 4, '5-8 s', 90, '', false, 0, P('time', 5, 8, 'Advanced tuck (dos plat)')),
         ex('w2', 'L-sit', 3, '8-10 s', 75, 'En tuck si besoin.', false, 0, P('time', 8, 10, 'Une jambe tendue'))
       ] },
-      { focus: 'Yoga et mobilité', note: 'Circuit d’environ 25 min, jamais à la douleur. Respire lentement et garde chaque position sans forcer.', exercises: [
-        ex('y1', 'Respiration et chat-vache', 1, '2 min', 0, '', false, 120),
-        ex('y2', 'Chien tête en bas (pédalage)', 1, '2 min', 0, '', false, 120),
-        ex('y3', 'Rotation thoracique (thread the needle)', 2, '1 min', 0, 'Une série par côté.', false, 60),
-        ex('y4', 'Pose du chiot (épaules)', 3, '1 min', 0, 'Droite, gauche, puis gauche encore pour l’épaule moins mobile.', false, 60),
-        ex('y5', 'Wall angels', 2, '10', 0, 'Dos et bras plaqués au mur.', false, 60),
-        ex('y6', 'Étirements des poignets', 1, '2 min', 0, 'Flexion puis extension.', false, 120),
-        ex('y7', 'Fente basse', 2, '1 min', 0, 'Une série par côté.', false, 60),
-        ex('y8', 'Pigeon ou figure en 4', 2, '1 min 30', 0, 'Une série par côté.', false, 90),
-        ex('y9', 'Flexion avant, jambes tendues', 1, '2 min', 0, '', false, 120),
-        ex('y10', 'Suspension passive à la barre', 2, '30 s', 30, 'Épaules relâchées.', false, 30),
-        ex('y11', 'Relaxation au sol', 1, '2 min', 0, '', false, 120)
-      ] },
+      { focus: 'Yoga', note: 'Fais ta séance de yoga avec ta vidéo YouTube, sans forcer, jamais à la douleur. Reviens ensuite la marquer comme faite.', exercises: [] },
       { focus: 'Full body', note: '', exercises: [
         ex('v1', 'Tractions strictes', 4, '4-6', 90, 'Max moins 2 répétitions.', false, 0, P('reps', 4, 6, 'Descente en 3 s')),
         ex('v2', 'Dips stricts', 4, '8-10', 90, 'Max moins 2 répétitions.', false, 0, P('reps', 8, 10, 'Tempo lent : 3 s à la descente')),
@@ -334,12 +322,8 @@ textarea { resize: vertical; min-height: 44px; }
         ex('v4', 'Dragon flag négatifs', 3, '5-8', 75, '', false, 0, P('reps', 5, 8, 'Descente en 5 s')),
         ex('v5', 'Finisher : pompes max', 1, 'max', 0, 'Une seule série, jusqu’à l’échec technique.', true)
       ] },
-      { focus: 'Fractionné', note: 'Course sur le tapis. L’effort compte plus que la vitesse : rapide = 8/10, tu ne peux plus parler.', exercises: [
-        ex('s1', 'Échauffement tranquille', 1, '10 min', 0, '', false, 600),
-        ex('s2', 'Fractionné : 1 min rapide', 6, '1 min', 120, 'Coche après chaque minute rapide : le minuteur compte les 2 min lentes.', false, 60, P('sets', 6, 8, 'Phases rapides de 1 min 30')),
-        ex('s3', 'Retour au calme', 1, '5 min', 0, '', false, 300)
-      ] },
-      { focus: 'Repos', note: 'Repos complet. Les 10 000 pas restent l’objectif de la journée.', exercises: [] }
+      { focus: 'Repos', note: 'Jour de repos. Ton objectif : marcher, rien à faire dans l’app.', exercises: [] },
+      { focus: 'Repos', note: 'Jour de repos. Ton objectif : marcher, rien à faire dans l’app.', exercises: [] }
     ];
   }
   var DEFAULTS = {};
@@ -388,10 +372,19 @@ textarea { resize: vertical; min-height: 44px; }
 
   /* ---------- état ---------- */
   function blank() { return { v: 2, program: defaultProgram(), weeks: {}, logs: {}, records: {}, meta: { updatedAt: 0 } }; }
+  var migrated = false;
   function cloneProgram(p) {
-    return p.map(function (d) {
+    var out = p.map(function (d) {
       return { focus: d.focus || '', note: d.note || '', exercises: (d.exercises || []).map(function (e) { return enrich(JSON.parse(JSON.stringify(e))); }) };
     });
+    /* jeudi : l'ancien circuit de yoga (11 exercices) devient un simple jour « Yoga » */
+    function oldDay(d, re) { return d && d.exercises.length && d.exercises.every(function (e) { return re.test(e.id); }); }
+    var def = defaultProgram();
+    if (oldDay(out[3], /^y\d+$/)) { out[3] = def[3]; migrated = true; }
+    /* samedi (ancien fractionné) et dimanche (ancien repos complet) deviennent des jours de repos où on marche */
+    if (oldDay(out[5], /^s\d+$/)) { out[5] = def[5]; migrated = true; }
+    if (out[6] && !out[6].exercises.length && /^Repos complet\./.test(out[6].note)) { out[6] = def[6]; migrated = true; }
+    return out;
   }
   function fromV1(p) {
     var s = blank(), now = Date.now();
@@ -452,6 +445,7 @@ textarea { resize: vertical; min-height: 44px; }
     return blank();
   }
   var state = loadState();
+  if (migrated) { state.meta.updatedAt = Date.now(); migrated = false; }
   function saveLocal() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
   function save() { saveLocal(); schedulePush(); }
   function touchMain() { state.meta.updatedAt = Date.now(); }
@@ -673,7 +667,7 @@ textarea { resize: vertical; min-height: 44px; }
   }
 
   function renderView(d, mon, k, l) {
-    if (!d.exercises.length) {
+    if (!d.exercises.length && /repos/i.test(d.focus)) {
       return '<div class="rest"><h2>Jour de repos</h2><p>Rien au programme. Tu peux ajouter des exercices avec « Modifier ».</p></div>';
     }
     var h = '<div class="list">';
@@ -722,22 +716,23 @@ textarea { resize: vertical; min-height: 44px; }
     });
     h += '</div>';
     var tt = totals(sel, mon, l);
-    if (l && (l.finished || tt.done > 0)) {
+    var noEx = !d.exercises.length, isFin = !!(l && l.finished);
+    if (noEx || (l && (isFin || tt.done > 0))) {
       h += '<section class="finish">';
       if (finishOpen) {
-        var defMin = l.finished ? l.minutes : (l.startedAt ? Math.min(180, Math.max(1, Math.round((Date.now() - l.startedAt) / 60000))) : minutesEstimate(d, mon));
-        if ((defMin > 120 || defMin < 5) && !l.finished) defMin = minutesEstimate(d, mon);
-        var f = finishFeel || l.feel;
+        var defMin = isFin ? l.minutes : (l && l.startedAt && !noEx ? Math.min(180, Math.max(1, Math.round((Date.now() - l.startedAt) / 60000))) : minutesEstimate(d, mon));
+        if ((defMin > 120 || defMin < 5) && !isFin) defMin = minutesEstimate(d, mon) || 30;
+        var f = finishFeel || (l && l.feel);
         h += '<h2>Comment c’était ?</h2><div class="feels">';
         FEELS.forEach(function (x) { h += '<button type="button" class="feel" data-act="feel" data-id="' + x.k + '" aria-pressed="' + (f === x.k) + '"><span>' + x.emo + '</span>' + x.label + '</button>'; });
-        h += '</div><p class="hint">Ton ressenti et tes reps règlent les objectifs de la semaine prochaine. Touche une série faite pour corriger son nombre de reps.</p>' +
+        h += '</div>' + (noEx ? '' : '<p class="hint">Ton ressenti et tes reps règlent les objectifs de la semaine prochaine. Touche une série faite pour corriger son nombre de reps.</p>') +
           '<div class="field"><label for="fin-min">Durée (min)</label><input type="number" inputmode="numeric" min="1" id="fin-min" value="' + defMin + '"></div>' +
           '<div class="edit-actions"><button type="button" class="btn primary" data-act="finishSave"' + (f ? '' : ' disabled') + '>Enregistrer</button><button type="button" class="btn" data-act="finishCancel">Annuler</button></div>';
-      } else if (l.finished) {
+      } else if (isFin) {
         var fo = feelOf(l.feel);
         h += '<p class="logged"><b>Séance enregistrée</b> · ' + fmtMin(l.minutes) + (fo ? ' · ' + fo.emo + ' ' + fo.label : '') + '</p><button type="button" class="btn" data-act="finishOpen">Modifier</button>';
       } else {
-        h += '<button type="button" class="btn primary wide" data-act="finishOpen">Terminer la séance</button>';
+        h += '<button type="button" class="btn primary wide" data-act="finishOpen">' + (noEx ? 'Marquer la séance faite' : 'Terminer la séance') + '</button>';
       }
       h += '</section>';
     }
@@ -760,7 +755,7 @@ textarea { resize: vertical; min-height: 44px; }
     list.forEach(function (s) { totMin += s.minutes || 0; totSets += logSets(s); });
     var wEnd = addDays(CUR_MON, 6);
     var weekN = list.filter(function (s) { return s.date >= CUR_MON && s.date <= wEnd; }).length;
-    var plannedDays = state.program.filter(function (d) { return d.exercises.length; }).length;
+    var plannedDays = state.program.filter(function (d) { return d.exercises.length || !/repos/i.test(d.focus); }).length;
     var h = '<div class="histo">';
     h += '<div class="stats">' + stat(list.length, 'Séances') + stat(weekN + ' / ' + plannedDays, 'Cette semaine') + stat(fmtMin(totMin), 'Temps total') + stat(totSets, 'Séries') + '</div>';
 
@@ -835,7 +830,7 @@ textarea { resize: vertical; min-height: 44px; }
       var plannedN = 0; items.forEach(function (x) { plannedN += x.max ? 1 : x.sets; });
       h += '<details class="sess" data-date="' + s.date + '"' + (openDate === s.date ? ' open' : '') + '><summary>' +
         '<div class="dbox"><b>' + dt.getDate() + '</b><small>' + DAY_SHORT[(dt.getDay() + 6) % 7] + '</small></div>' +
-        '<div class="sinfo"><strong>' + (fo ? fo.emo + ' ' : '') + esc(s.focus) + '</strong><span>' + fmtMin(s.minutes) + ' · ' + logSets(s) + '/' + plannedN + ' séries' + (fo ? ' · ' + fo.label : '') + '</span></div></summary>' +
+        '<div class="sinfo"><strong>' + (fo ? fo.emo + ' ' : '') + esc(s.focus) + '</strong><span>' + fmtMin(s.minutes) + (plannedN ? ' · ' + logSets(s) + '/' + plannedN + ' séries' : '') + (fo ? ' · ' + fo.label : '') + '</span></div></summary>' +
         '<div class="sess-body"><ul>';
       items.forEach(function (x) {
         var val;
@@ -1295,7 +1290,7 @@ textarea { resize: vertical; min-height: 44px; }
       if (!main) cloud.lastPush = 0;
       else {
         if ((main.updatedAt || 0) > (state.meta.updatedAt || 0) && Array.isArray(main.program) && main.program.length === 7) {
-          state.program = cloneProgram(main.program); state.meta.updatedAt = main.updatedAt;
+          state.program = cloneProgram(main.program); state.meta.updatedAt = migrated ? Date.now() : main.updatedAt; migrated = false;
         }
         var rr = main.records || {};
         Object.keys(rr).forEach(function (k) { if (!(state.records[k] >= rr[k])) state.records[k] = rr[k]; });
