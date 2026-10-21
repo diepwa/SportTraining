@@ -237,7 +237,9 @@ textarea { resize: vertical; min-height: 44px; }
 .bodymap .ax { fill: var(--muted); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; }
 .legend { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 0.75rem; color: var(--muted); }
 .legend i { flex: 1; height: 8px; border-radius: 4px; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 20%, var(--surface)), var(--accent)); border: 1px solid var(--line); }
-.musc li { grid-template-columns: 112px minmax(0, 1fr) auto; }
+.musc li { grid-template-columns: 84px minmax(0, 1fr) 138px; }
+.musc li .mono { text-align: right; font-size: 0.8rem; }
+.musc small { color: var(--muted); font-size: 0.72rem; }
 .mbar { height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; }
 .mbar i { display: block; height: 100%; background: var(--accent); }
 
@@ -869,7 +871,7 @@ textarea { resize: vertical; min-height: 44px; }
   function dumpJson() { return JSON.stringify({ v: 2, program: state.program, weeks: state.weeks, logs: state.logs, records: state.records }); }
   /* ---------- carte des muscles ---------- */
   var MUSCLES = ['pecs', 'delts', 'traps', 'lats', 'upperback', 'biceps', 'triceps', 'forearms', 'abs', 'obliques', 'lowback', 'glutes', 'quads', 'hams', 'calves'];
-  var MUSCLE_NAME = { pecs: 'Pectoraux', delts: 'Épaules', traps: 'Trapèzes', lats: 'Dorsaux', upperback: 'Haut du dos', biceps: 'Biceps', triceps: 'Triceps', forearms: 'Avant-bras', abs: 'Abdominaux', obliques: 'Obliques', lowback: 'Lombaires', glutes: 'Fessiers', quads: 'Quadriceps', hams: 'Ischio-jambiers', calves: 'Mollets' };
+  var MUSCLE_NAME = { pecs: 'Pectoraux', delts: 'Épaules', traps: 'Trapèzes', lats: 'Dorsaux', upperback: 'Haut du dos', biceps: 'Biceps', triceps: 'Triceps', forearms: 'Avant-bras', abs: 'Abdominaux', obliques: 'Obliques', lowback: 'Lombaires', glutes: 'Fessiers', quads: 'Quadriceps', hams: 'Ischios', calves: 'Mollets' };
   /* part de chaque muscle dans un mouvement (1 = muscle moteur principal) */
   var MOVE = {
     dips: { pecs: 0.6, triceps: 1, delts: 0.5, abs: 0.1 },
@@ -989,7 +991,7 @@ textarea { resize: vertical; min-height: 44px; }
     h += '<section class="panel">' + bodySvg(L, max, musSel) +
       '<div class="legend"><span>Peu</span><i></i><span>Beaucoup</span></div>';
     if (musSel && L[musSel]) {
-      h += '<p class="readout"><b>' + MUSCLE_NAME[musSel] + '</b> · ' + (Math.round(L[musSel].sets * 10) / 10) + ' séries pondérées · ' + (max ? Math.round(100 * L[musSel].vol / max) : 0) + ' % du muscle le plus sollicité</p>';
+      h += '<p class="readout"><b>' + MUSCLE_NAME[musSel] + '</b> · ' + (Math.round(L[musSel].sets * 10) / 10) + ' séries pondérées · ' + Math.round(L[musSel].vol) + ' reps pondérées · ' + (max ? Math.round(100 * L[musSel].vol / max) : 0) + ' % du muscle le plus sollicité</p>';
     } else {
       h += '<p class="readout">' + (musMode === 'plan' ? 'Calculé à partir du programme de la semaine.' : 'Calculé à partir de ce que tu as réellement fait cette semaine.') + ' Touche un muscle pour le détail.</p>';
     }
@@ -1001,9 +1003,9 @@ textarea { resize: vertical; min-height: 44px; }
       h += '<section class="panel"><h2>Du plus au moins travaillé</h2><ul class="prog musc">';
       rows.forEach(function (m) {
         var v = L[m].vol, pct = max ? Math.round(100 * v / max) : 0;
-        h += '<li><span>' + MUSCLE_NAME[m] + '</span><span class="mbar"><i style="width:' + pct + '%"></i></span><span class="mono">' + (v > 0 ? (Math.round(L[m].sets * 10) / 10) + ' sér.' : '—') + '</span></li>';
+        h += '<li><span>' + MUSCLE_NAME[m] + '</span><span class="mbar"><i style="width:' + pct + '%"></i></span><span class="mono">' + (v > 0 ? Math.round(v) + ' rép. <small>' + (Math.round(L[m].sets * 10) / 10) + ' sér.</small>' : '—') + '</span></li>';
       });
-      h += '</ul><p class="readout">Le dégradé compare tes muscles entre eux : séries × reps × part du muscle dans le mouvement (3 s de tenue comptent comme 1 rep). « Séries pondérées » : une série de dips compte 1 pour les triceps et 0,6 pour les pectoraux. Pas de travail de force des jambes au programme : elles bossent surtout en marchant.</p></section>';
+      h += '</ul><p class="readout">Les barres et le dégradé comparent tes muscles sur les « reps pondérées » : séries × reps × part du muscle dans le mouvement (3 s de tenue comptent comme 1 rep). Une série de dips compte pour 1 sur les triceps et 0,6 sur les pectoraux. Le nombre de séries pondérées est indiqué à côté : un muscle peut avoir plus de séries mais moins de reps. Pas de travail de force des jambes au programme : elles bossent surtout en marchant.</p></section>';
     }
     if (r.unmapped.length) h += '<p class="hint">Sans muscles associés : ' + esc(r.unmapped.join(', ')) + '.</p>';
     return h + '</div>';
