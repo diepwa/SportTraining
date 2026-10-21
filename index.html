@@ -260,9 +260,16 @@ textarea { resize: vertical; min-height: 44px; }
 
 <script>
 (function () {
-  /* Config Firebase : colle ici l'objet firebaseConfig de ton projet (voir README.md).
-     Tant que c'est null, l'app marche comme avant, uniquement sur cet appareil. */
-  var FIREBASE_CONFIG = null;
+  /* Config Firebase du projet « sporttraining-130bb ». Ces valeurs ne sont pas secrètes : la sécurité repose sur les
+     règles Firestore (firestore.rules). Mets null pour n'utiliser l'app qu'en local. */
+  var FIREBASE_CONFIG = {
+    apiKey: 'AIzaSyBtLGwnuEvxuhiZnUr4gwFr0KVXxMUTBWQ',
+    authDomain: 'sporttraining-130bb.firebaseapp.com',
+    projectId: 'sporttraining-130bb',
+    storageBucket: 'sporttraining-130bb.firebasestorage.app',
+    messagingSenderId: '1056851854748',
+    appId: '1:1056851854748:web:2732455d12c0c352673459'
+  };
   var FB_BASE = window.FIREBASE_SDK_BASE || 'https://www.gstatic.com/firebasejs/10.12.2/';
 
   var KEY = 'calisthenie.v2', OLD_KEY = 'calisthenie.v1', SYNC_KEY = 'calisthenie.sync';
@@ -1235,6 +1242,7 @@ textarea { resize: vertical; min-height: 44px; }
     'auth/missing-password': 'Entre un mot de passe.',
     'auth/network-request-failed': 'Pas de réseau.',
     'auth/too-many-requests': 'Trop d’essais. Réessaie dans quelques minutes.',
+    'auth/admin-restricted-operation': 'Les inscriptions sont fermées sur ce projet. Crée le compte dans la console Firebase (Authentication → Utilisateurs → Ajouter un utilisateur), puis connecte-toi.',
     'auth/operation-not-allowed': 'La connexion par e-mail n’est pas activée dans Firebase (Authentication → Sign-in method).'
   };
   function authAction(act) {
@@ -1254,7 +1262,7 @@ textarea { resize: vertical; min-height: 44px; }
     Promise.all([import(FB_BASE + 'firebase-app.js'), import(FB_BASE + 'firebase-auth.js'), import(FB_BASE + 'firebase-firestore.js')]).then(function (m) {
       var A = m[0], Au = m[1], F = m[2];
       var app = A.initializeApp(FIREBASE_CONFIG), db;
-      try { db = F.initializeFirestore(app, { localCache: F.persistentLocalCache() }); } catch (e) { db = F.getFirestore(app); }
+      try { db = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }), experimentalAutoDetectLongPolling: true }); } catch (e) { db = F.getFirestore(app); }
       if (window.FIREBASE_EMULATOR) {
         Au.connectAuthEmulator(Au.getAuth(app), 'http://' + window.FIREBASE_EMULATOR.auth, { disableWarnings: true });
         F.connectFirestoreEmulator(db, window.FIREBASE_EMULATOR.host, window.FIREBASE_EMULATOR.port);

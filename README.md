@@ -25,7 +25,7 @@ Les données de l'ancienne version (`calisthenie.v1`) sont reprises automatiquem
 3. **Firestore Database** → Créer une base de données → mode **production** → région `eur3` (Europe).
 4. Onglet **Règles** de Firestore : colle le contenu de [`firestore.rules`](firestore.rules), puis **Publier**. Avec ces règles, chaque compte ne peut lire et écrire que ses propres données.
 5. Paramètres du projet (⚙️) → **Vos applications** → icône Web `</>` → donne un nom → **Enregistrer**. Copie l'objet `firebaseConfig`.
-6. Dans `index.html`, remplace `var FIREBASE_CONFIG = null;` par `var FIREBASE_CONFIG = { apiKey: "...", authDomain: "...", projectId: "...", appId: "..." };`.
+6. Dans `index.html`, la config du projet `sporttraining-130bb` est déjà en place (`var FIREBASE_CONFIG`). Pour un autre projet, remplace-la par ton objet `firebaseConfig`.
 7. Authentication → **Paramètres** → **Domaines autorisés** : ajoute le domaine où l'app est hébergée (par exemple `diepwa.github.io` ou `ton-site.netlify.app`).
 8. Ouvre l'app, touche le bouton **Connexion** en haut, puis **Créer un compte**. Ton historique local est envoyé dans le cloud.
 
