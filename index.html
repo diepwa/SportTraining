@@ -1145,8 +1145,8 @@ textarea { resize: vertical; min-height: 44px; }
       selSet = null;
       if (!lg.startedAt) lg.startedAt = Date.now();
       touchLog(lg);
-      var after = totals(sel, mon, lg);
-      if (after.done < after.total) startTimer(parseInt(e.rest, 10) || 0, e.name); else stopTimer();
+      var rs = parseInt(e.rest, 10) || 0;
+      if (rs) startTimer(rs, e.name); else stopTimer();
       save(); render(); return;
     }
     if (act === 'inc' || act === 'dec') {
